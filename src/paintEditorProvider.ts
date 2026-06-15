@@ -250,7 +250,9 @@ export class PaintEditorProvider implements vscode.CustomEditorProvider<PaintDoc
 		<span id="status"></span>
 	</div>
 	<div id="viewport">
-		<canvas id="canvas"></canvas>
+		<div id="canvas-wrap">
+			<canvas id="canvas"></canvas>
+		</div>
 	</div>
 	<script nonce="${nonce}" src="${scriptUri}"></script>
 </body>

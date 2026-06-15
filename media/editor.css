@@ -59,6 +59,7 @@ body {
 	width: 100%;
 	height: calc(100% - 40px);
 	overflow: auto;
+	cursor: default;
 	background:
 		linear-gradient(45deg, #80808040 25%, transparent 25%),
 		linear-gradient(-45deg, #80808040 25%, transparent 25%),
@@ -69,8 +70,22 @@ body {
 	background-color: var(--vscode-editor-background);
 }
 
+#canvas-wrap {
+	display: inline-block;
+	padding: 32px;
+	line-height: 0;
+}
+
 #canvas {
 	display: block;
 	image-rendering: pixelated;
 	cursor: crosshair;
+}
+
+#viewport.pan-ready #canvas {
+	cursor: grab;
+}
+
+#viewport.panning #canvas {
+	cursor: grabbing;
 }

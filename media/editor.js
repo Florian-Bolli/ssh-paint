@@ -3,6 +3,7 @@
 	const vscode = acquireVsCodeApi();
 
 	const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById('canvas'));
+	const viewport = /** @type {HTMLDivElement} */ (document.getElementById('viewport'));
 	const ctx = canvas.getContext('2d', { willReadFrequently: true });
 	const statusEl = /** @type {HTMLSpanElement} */ (document.getElementById('status'));
 	const sizeInput = /** @type {HTMLInputElement} */ (document.getElementById('size'));
@@ -29,6 +30,14 @@
 	/** @type {{ x: number; y: number } | null} */
 	let lastPoint = null;
 	let dirty = false;
+
+	let spaceHeld = false;
+	let panning = false;
+	/** @type {{ x: number; y: number; scrollLeft: number; scrollTop: number } | null} */
+	let panStart = null;
+	let zoom = 1;
+	const MAX_ZOOM = 32;
+	const FIT_PADDING = 32;
 
 	/** @type {Uint8ClampedArray[]} */
 	let history = [];
@@ -73,6 +82,98 @@
 		dirty = false;
 	}
 
+	function applyZoom() {
+		canvas.style.width = `${width * zoom}px`;
+		canvas.style.height = `${height * zoom}px`;
+	}
+
+	function getFitZoom() {
+		if (!width || !height) {
+			return 1;
+		}
+		const pad = FIT_PADDING * 2;
+		const availableW = Math.max(1, viewport.clientWidth - pad);
+		const availableH = Math.max(1, viewport.clientHeight - pad);
+		return Math.min(availableW / width, availableH / height);
+	}
+
+	function getMinZoom() {
+		const fit = getFitZoom();
+		return fit < 1 ? fit : 1;
+	}
+
+	function getContentSize() {
+		const pad = FIT_PADDING * 2;
+		return {
+			width: width * zoom + pad,
+			height: height * zoom + pad,
+		};
+	}
+
+	function centerView() {
+		const content = getContentSize();
+		viewport.scrollLeft = Math.max(0, (content.width - viewport.clientWidth) / 2);
+		viewport.scrollTop = Math.max(0, (content.height - viewport.clientHeight) / 2);
+	}
+
+	function zoomAt(clientX, clientY, factor) {
+		const next = clamp(zoom * factor, getMinZoom(), MAX_ZOOM);
+		if (next === zoom) {
+			return;
+		}
+
+		const rect = canvas.getBoundingClientRect();
+		const offsetX = clientX - rect.left;
+		const offsetY = clientY - rect.top;
+		const ratio = next / zoom;
+		const scrollX = viewport.scrollLeft + offsetX;
+		const scrollY = viewport.scrollTop + offsetY;
+
+		zoom = next;
+		applyZoom();
+
+		viewport.scrollLeft = scrollX * ratio - offsetX;
+		viewport.scrollTop = scrollY * ratio - offsetY;
+
+		if (next === getMinZoom()) {
+			centerView();
+		}
+	}
+
+	function isPanButton(/** @type {MouseEvent} */ e) {
+		return e.button === 1 || (e.button === 0 && spaceHeld);
+	}
+
+	function startPan(/** @type {MouseEvent} */ e) {
+		panning = true;
+		panStart = {
+			x: e.clientX,
+			y: e.clientY,
+			scrollLeft: viewport.scrollLeft,
+			scrollTop: viewport.scrollTop,
+		};
+		viewport.classList.add('panning');
+		e.preventDefault();
+	}
+
+	function onPanMove(/** @type {MouseEvent} */ e) {
+		if (!panning || !panStart) {
+			return;
+		}
+		viewport.scrollLeft = panStart.scrollLeft - (e.clientX - panStart.x);
+		viewport.scrollTop = panStart.scrollTop - (e.clientY - panStart.y);
+		e.preventDefault();
+	}
+
+	function endPan() {
+		if (!panning) {
+			return;
+		}
+		panning = false;
+		panStart = null;
+		viewport.classList.remove('panning');
+	}
+
 	function setStatus(text) {
 		statusEl.textContent = text;
 	}
@@ -97,6 +198,10 @@
 		canvas.height = h;
 		const data = rgba instanceof Uint8ClampedArray ? rgba : new Uint8ClampedArray(rgba);
 		buffer = new ImageData(new Uint8ClampedArray(data), w, h);
+		const fit = getFitZoom();
+		zoom = fit < 1 ? fit : 1;
+		applyZoom();
+		centerView();
 		render();
 		dirty = false;
 		resetHistory();
@@ -186,7 +291,10 @@
 	}
 
 	function onPointerDown(e) {
-		if (e.button !== 0 || !buffer) {
+		if (!buffer || isPanButton(e) || spaceHeld) {
+			return;
+		}
+		if (e.button !== 0) {
 			return;
 		}
 		const p = getPos(e);
@@ -206,7 +314,7 @@
 	}
 
 	function onPointerMove(e) {
-		if (!drawing || !buffer) {
+		if (panning || !drawing || !buffer) {
 			return;
 		}
 		const p = getPos(e);
@@ -228,7 +336,7 @@
 	}
 
 	function onPointerUp(e) {
-		if (!drawing || !buffer) {
+		if (panning || !drawing || !buffer) {
 			return;
 		}
 		const p = getPos(e);
@@ -252,6 +360,60 @@
 	canvas.addEventListener('mousedown', onPointerDown);
 	canvas.addEventListener('mousemove', onPointerMove);
 	window.addEventListener('mouseup', onPointerUp);
+	canvas.addEventListener('auxclick', (e) => {
+		if (e.button === 1) {
+			e.preventDefault();
+		}
+	});
+
+	viewport.addEventListener('mousedown', (e) => {
+		if (isPanButton(e)) {
+			startPan(e);
+		}
+	});
+	window.addEventListener('mousemove', onPanMove);
+	window.addEventListener('mouseup', endPan);
+
+	window.addEventListener('keydown', (e) => {
+		if (e.code !== 'Space' || e.repeat) {
+			return;
+		}
+		const tag = /** @type {HTMLElement} */ (e.target).tagName;
+		if (tag === 'INPUT' || tag === 'BUTTON') {
+			return;
+		}
+		spaceHeld = true;
+		viewport.classList.add('pan-ready');
+		e.preventDefault();
+	});
+
+	window.addEventListener('keyup', (e) => {
+		if (e.code !== 'Space') {
+			return;
+		}
+		spaceHeld = false;
+		viewport.classList.remove('pan-ready');
+		endPan();
+	});
+
+	viewport.addEventListener(
+		'wheel',
+		(e) => {
+			if (!e.ctrlKey && !e.metaKey) {
+				return;
+			}
+			e.preventDefault();
+			const factor = e.deltaY > 0 ? 1 / 1.1 : 1.1;
+			zoomAt(e.clientX, e.clientY, factor);
+		},
+		{ passive: false },
+	);
+
+	window.addEventListener('blur', () => {
+		spaceHeld = false;
+		viewport.classList.remove('pan-ready');
+		endPan();
+	});
 
 	document.querySelectorAll('.tool').forEach((btn) => {
 		btn.addEventListener('click', () => {
