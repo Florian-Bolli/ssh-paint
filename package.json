@@ -63,6 +63,11 @@
 				"icon": "$(git-commit)"
 			},
 			{
+				"command": "sshPaint.tool.bucket",
+				"title": "SSH Paint: Bucket Tool",
+				"icon": "$(paintcan)"
+			},
+			{
 				"command": "sshPaint.file.new",
 				"title": "SSH Paint: New Image",
 				"icon": "$(file-add)"
@@ -82,6 +87,11 @@
 			{
 				"command": "sshPaint.tool.line",
 				"key": "l",
+				"when": "activeCustomEditorId == 'sshPaint.editor' && !inQuickOpen"
+			},
+			{
+				"command": "sshPaint.tool.bucket",
+				"key": "g",
 				"when": "activeCustomEditorId == 'sshPaint.editor' && !inQuickOpen"
 			}
 		]

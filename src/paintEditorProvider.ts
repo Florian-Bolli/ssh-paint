@@ -10,7 +10,7 @@ type WebviewInboundMessage =
 
 type WebviewOutboundMessage =
 	| { type: 'init'; width: number; height: number; rgba: PixelBuffer }
-	| { type: 'setTool'; tool: 'pen' | 'line' }
+	| { type: 'setTool'; tool: 'pen' | 'line' | 'bucket' }
 	| { type: 'undo' }
 	| { type: 'redo' }
 	| { type: 'save' }
@@ -215,7 +215,7 @@ export class PaintEditorProvider implements vscode.CustomEditorProvider<PaintDoc
 		};
 	}
 
-	setTool(tool: 'pen' | 'line'): void {
+	setTool(tool: 'pen' | 'line' | 'bucket'): void {
 		if (!this._activeUri) {
 			return;
 		}
@@ -245,6 +245,7 @@ export class PaintEditorProvider implements vscode.CustomEditorProvider<PaintDoc
 	<div id="toolbar">
 		<button type="button" class="tool active" data-tool="pen" title="Pen (P)">Pen</button>
 		<button type="button" class="tool" data-tool="line" title="Line (L)">Line</button>
+		<button type="button" class="tool" data-tool="bucket" title="Bucket (G)">Bucket</button>
 		<label class="field">Size <input type="range" id="size" min="1" max="32" value="1"></label>
 		<label class="field">Color <input type="color" id="color" value="#000000"></label>
 		<span id="status"></span>

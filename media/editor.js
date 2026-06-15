@@ -13,7 +13,7 @@
 		throw new Error('Canvas 2D not available');
 	}
 
-	/** @type {'pen' | 'line'} */
+	/** @type {'pen' | 'line' | 'bucket'} */
 	let tool = 'pen';
 	let brushSize = 1;
 	let color = { r: 0, g: 0, b: 0, a: 255 };
@@ -183,7 +183,21 @@
 		document.querySelectorAll('.tool').forEach((btn) => {
 			btn.classList.toggle('active', btn.getAttribute('data-tool') === next);
 		});
-		setStatus(`${next === 'pen' ? 'Pen' : 'Line'} · ${brushSize}px`);
+		if (next === 'bucket') {
+			setStatus('Bucket');
+		} else {
+			setStatus(`${next === 'pen' ? 'Pen' : 'Line'} · ${brushSize}px`);
+		}
+	}
+
+	function toolLabel() {
+		if (tool === 'pen') {
+			return 'Pen';
+		}
+		if (tool === 'line') {
+			return 'Line';
+		}
+		return 'Bucket';
 	}
 
 	function parseColor(hex) {
@@ -281,6 +295,77 @@
 		}
 	}
 
+	function matchesColor(/** @type {number} */ i, r, g, b, a) {
+		if (!buffer) {
+			return false;
+		}
+		const data = buffer.data;
+		return data[i] === r && data[i + 1] === g && data[i + 2] === b && data[i + 3] === a;
+	}
+
+	function floodFill(startX, startY) {
+		if (!buffer) {
+			return false;
+		}
+		const data = buffer.data;
+		const startI = (startY * width + startX) * 4;
+		const tr = data[startI];
+		const tg = data[startI + 1];
+		const tb = data[startI + 2];
+		const ta = data[startI + 3];
+
+		if (tr === color.r && tg === color.g && tb === color.b && ta === 255) {
+			return false;
+		}
+
+		/** @type {[number, number][]} */
+		const stack = [[startX, startY]];
+		let changed = false;
+
+		while (stack.length > 0) {
+			const [x, y] = stack.pop();
+			let left = x;
+			while (left >= 0 && matchesColor((y * width + left) * 4, tr, tg, tb, ta)) {
+				left--;
+			}
+			left++;
+
+			let right = x;
+			while (right < width && matchesColor((y * width + right) * 4, tr, tg, tb, ta)) {
+				right++;
+			}
+			right--;
+
+			for (let px = left; px <= right; px++) {
+				const i = (y * width + px) * 4;
+				data[i] = color.r;
+				data[i + 1] = color.g;
+				data[i + 2] = color.b;
+				data[i + 3] = 255;
+				changed = true;
+			}
+
+			for (const ny of [y - 1, y + 1]) {
+				if (ny < 0 || ny >= height) {
+					continue;
+				}
+				let inSpan = false;
+				for (let px = left; px <= right; px++) {
+					if (matchesColor((ny * width + px) * 4, tr, tg, tb, ta)) {
+						if (!inSpan) {
+							stack.push([px, ny]);
+							inSpan = true;
+						}
+					} else {
+						inSpan = false;
+					}
+				}
+			}
+		}
+
+		return changed;
+	}
+
 	function commitEdit() {
 		if (!buffer || !dirty) {
 			return;
@@ -300,6 +385,16 @@
 		const p = getPos(e);
 		const x = clamp(p.x, 0, width - 1);
 		const y = clamp(p.y, 0, height - 1);
+
+		if (tool === 'bucket') {
+			if (floodFill(x, y)) {
+				render();
+				dirty = true;
+				commitEdit();
+			}
+			return;
+		}
+
 		drawing = true;
 		lastPoint = { x, y };
 
@@ -307,7 +402,7 @@
 			stampBrush(x, y);
 			render();
 			dirty = true;
-		} else {
+		} else if (tool === 'line') {
 			lineStart = { x, y };
 			lineSnapshot = new Uint8ClampedArray(buffer.data);
 		}
@@ -328,7 +423,7 @@
 			lastPoint = { x, y };
 			render();
 			dirty = true;
-		} else if (lineStart && lineSnapshot) {
+		} else if (tool === 'line' && lineStart && lineSnapshot) {
 			buffer.data.set(lineSnapshot);
 			drawLine(lineStart.x, lineStart.y, x, y);
 			render();
@@ -417,14 +512,16 @@
 
 	document.querySelectorAll('.tool').forEach((btn) => {
 		btn.addEventListener('click', () => {
-			const t = /** @type {'pen' | 'line'} */ (btn.getAttribute('data-tool'));
+			const t = /** @type {'pen' | 'line' | 'bucket'} */ (btn.getAttribute('data-tool'));
 			setTool(t);
 		});
 	});
 
 	sizeInput.addEventListener('input', () => {
 		brushSize = parseInt(sizeInput.value, 10) || 1;
-		setStatus(`${tool === 'pen' ? 'Pen' : 'Line'} · ${brushSize}px`);
+		if (tool !== 'bucket') {
+			setStatus(`${toolLabel()} · ${brushSize}px`);
+		}
 	});
 
 	colorInput.addEventListener('input', () => {
