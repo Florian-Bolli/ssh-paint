@@ -109,6 +109,7 @@
 	"scripts": {
 		"compile": "node esbuild.mjs",
 		"watch": "node esbuild.mjs --watch",
+		"icons": "node scripts/generate-icons.mjs",
 		"package": "vsce package",
 		"publish": "vsce publish"
 	},
@@ -117,6 +118,7 @@
 		"@types/vscode": "^1.85.0",
 		"@vscode/vsce": "^3.9.2",
 		"esbuild": "^0.20.0",
+		"sharp": "^0.35.1",
 		"typescript": "^5.3.0"
 	},
 	"dependencies": {

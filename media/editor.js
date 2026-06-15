@@ -7,6 +7,7 @@
 	const ctx = canvas.getContext('2d', { willReadFrequently: true });
 	const statusEl = /** @type {HTMLSpanElement} */ (document.getElementById('status'));
 	const sizeInput = /** @type {HTMLInputElement} */ (document.getElementById('size'));
+	const sizeNumInput = /** @type {HTMLInputElement} */ (document.getElementById('size-num'));
 	const colorInput = /** @type {HTMLInputElement} */ (document.getElementById('color'));
 
 	if (!ctx) {
@@ -189,13 +190,13 @@
 		} else if (next === 'picker') {
 			setStatus('Picker — click to sample');
 		} else {
-			setStatus(`${next === 'pen' ? 'Pen' : 'Line'} · ${brushSize}px`);
+			setStatus(`${next === 'pen' ? 'Brush' : 'Line'} · ${brushSize}px`);
 		}
 	}
 
 	function toolLabel() {
 		if (tool === 'pen') {
-			return 'Pen';
+			return 'Brush';
 		}
 		if (tool === 'line') {
 			return 'Line';
@@ -269,6 +270,15 @@
 
 	function clamp(v, min, max) {
 		return Math.max(min, Math.min(max, v));
+	}
+
+	function setBrushSize(next) {
+		brushSize = clamp(Math.round(next) || 1, 1, 32);
+		sizeInput.value = String(brushSize);
+		sizeNumInput.value = String(brushSize);
+		if (tool !== 'bucket' && tool !== 'picker') {
+			setStatus(`${toolLabel()} · ${brushSize}px`);
+		}
 	}
 
 	function setPixel(x, y, r, g, b, a) {
@@ -551,10 +561,15 @@
 	});
 
 	sizeInput.addEventListener('input', () => {
-		brushSize = parseInt(sizeInput.value, 10) || 1;
-		if (tool !== 'bucket' && tool !== 'picker') {
-			setStatus(`${toolLabel()} · ${brushSize}px`);
-		}
+		setBrushSize(parseInt(sizeInput.value, 10));
+	});
+
+	sizeNumInput.addEventListener('input', () => {
+		setBrushSize(parseInt(sizeNumInput.value, 10));
+	});
+
+	sizeNumInput.addEventListener('change', () => {
+		setBrushSize(parseInt(sizeNumInput.value, 10));
 	});
 
 	colorInput.addEventListener('input', () => {

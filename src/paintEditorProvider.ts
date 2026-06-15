@@ -230,24 +230,45 @@ export class PaintEditorProvider implements vscode.CustomEditorProvider<PaintDoc
 		const scriptUri = webview.asWebviewUri(
 			vscode.Uri.joinPath(this._extensionUri, 'media', 'editor.js'),
 		);
+		const icon = (name: string) =>
+			webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'icons', name));
+		const brushIconUri = icon('icon-brush.png');
+		const lineIconUri = icon('icon-line.png');
+		const bucketIconUri = icon('icon-bucket.png');
+		const pickerIconUri = icon('icon-picker.png');
 		const nonce = getNonce();
 
 		return `<!DOCTYPE html>
 <html lang="en">
 <head>
 	<meta charset="UTF-8">
-	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
+	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}'; img-src ${webview.cspSource};">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<link href="${styleUri}" rel="stylesheet">
 	<title>SSH Paint</title>
 </head>
 <body>
 	<div id="toolbar">
-		<button type="button" class="tool active" data-tool="pen" title="Pen (P)">Pen</button>
-		<button type="button" class="tool" data-tool="line" title="Line (L)">Line</button>
-		<button type="button" class="tool" data-tool="bucket" title="Bucket (G)">Bucket</button>
-		<button type="button" class="tool" data-tool="picker" title="Picker (I)">Picker</button>
-		<label class="field">Size <input type="range" id="size" min="1" max="32" value="1"></label>
+		<div id="tools" role="toolbar" aria-label="Tools">
+			<button type="button" class="tool active" data-tool="pen" title="Brush (P)" aria-label="Brush">
+				<img class="tool-img" src="${brushIconUri}" width="20" height="20" alt="">
+			</button>
+			<button type="button" class="tool" data-tool="line" title="Line (L)" aria-label="Line">
+				<img class="tool-img" src="${lineIconUri}" width="20" height="20" alt="">
+			</button>
+			<button type="button" class="tool" data-tool="bucket" title="Fill bucket (G)" aria-label="Fill bucket">
+				<img class="tool-img" src="${bucketIconUri}" width="20" height="20" alt="">
+			</button>
+			<button type="button" class="tool" data-tool="picker" title="Color picker (I)" aria-label="Color picker">
+				<img class="tool-img" src="${pickerIconUri}" width="20" height="20" alt="">
+			</button>
+		</div>
+		<label class="field size-field">
+			<span class="field-label">Size</span>
+			<input type="range" id="size" min="1" max="32" value="1">
+			<input type="number" id="size-num" class="size-num" min="1" max="32" value="1" aria-label="Brush size in pixels">
+			<span class="size-unit">px</span>
+		</label>
 		<label class="field">Color <input type="color" id="color" value="#000000"></label>
 		<span id="status"></span>
 	</div>
