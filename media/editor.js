@@ -3,16 +3,18 @@
 	const vscode = acquireVsCodeApi();
 
 	const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById('canvas'));
+	const viewport = /** @type {HTMLDivElement} */ (document.getElementById('viewport'));
 	const ctx = canvas.getContext('2d', { willReadFrequently: true });
 	const statusEl = /** @type {HTMLSpanElement} */ (document.getElementById('status'));
 	const sizeInput = /** @type {HTMLInputElement} */ (document.getElementById('size'));
+	const sizeNumInput = /** @type {HTMLInputElement} */ (document.getElementById('size-num'));
 	const colorInput = /** @type {HTMLInputElement} */ (document.getElementById('color'));
 
 	if (!ctx) {
 		throw new Error('Canvas 2D not available');
 	}
 
-	/** @type {'pen' | 'line'} */
+	/** @type {'pen' | 'line' | 'bucket' | 'picker'} */
 	let tool = 'pen';
 	let brushSize = 1;
 	let color = { r: 0, g: 0, b: 0, a: 255 };
@@ -29,6 +31,14 @@
 	/** @type {{ x: number; y: number } | null} */
 	let lastPoint = null;
 	let dirty = false;
+
+	let spaceHeld = false;
+	let panning = false;
+	/** @type {{ x: number; y: number; scrollLeft: number; scrollTop: number } | null} */
+	let panStart = null;
+	let zoom = 1;
+	const MAX_ZOOM = 32;
+	const FIT_PADDING = 32;
 
 	/** @type {Uint8ClampedArray[]} */
 	let history = [];
@@ -73,6 +83,98 @@
 		dirty = false;
 	}
 
+	function applyZoom() {
+		canvas.style.width = `${width * zoom}px`;
+		canvas.style.height = `${height * zoom}px`;
+	}
+
+	function getFitZoom() {
+		if (!width || !height) {
+			return 1;
+		}
+		const pad = FIT_PADDING * 2;
+		const availableW = Math.max(1, viewport.clientWidth - pad);
+		const availableH = Math.max(1, viewport.clientHeight - pad);
+		return Math.min(availableW / width, availableH / height);
+	}
+
+	function getMinZoom() {
+		const fit = getFitZoom();
+		return fit < 1 ? fit : 1;
+	}
+
+	function getContentSize() {
+		const pad = FIT_PADDING * 2;
+		return {
+			width: width * zoom + pad,
+			height: height * zoom + pad,
+		};
+	}
+
+	function centerView() {
+		const content = getContentSize();
+		viewport.scrollLeft = Math.max(0, (content.width - viewport.clientWidth) / 2);
+		viewport.scrollTop = Math.max(0, (content.height - viewport.clientHeight) / 2);
+	}
+
+	function zoomAt(clientX, clientY, factor) {
+		const next = clamp(zoom * factor, getMinZoom(), MAX_ZOOM);
+		if (next === zoom) {
+			return;
+		}
+
+		const rect = canvas.getBoundingClientRect();
+		const offsetX = clientX - rect.left;
+		const offsetY = clientY - rect.top;
+		const ratio = next / zoom;
+		const scrollX = viewport.scrollLeft + offsetX;
+		const scrollY = viewport.scrollTop + offsetY;
+
+		zoom = next;
+		applyZoom();
+
+		viewport.scrollLeft = scrollX * ratio - offsetX;
+		viewport.scrollTop = scrollY * ratio - offsetY;
+
+		if (next === getMinZoom()) {
+			centerView();
+		}
+	}
+
+	function isPanButton(/** @type {MouseEvent} */ e) {
+		return e.button === 1 || (e.button === 0 && spaceHeld);
+	}
+
+	function startPan(/** @type {MouseEvent} */ e) {
+		panning = true;
+		panStart = {
+			x: e.clientX,
+			y: e.clientY,
+			scrollLeft: viewport.scrollLeft,
+			scrollTop: viewport.scrollTop,
+		};
+		viewport.classList.add('panning');
+		e.preventDefault();
+	}
+
+	function onPanMove(/** @type {MouseEvent} */ e) {
+		if (!panning || !panStart) {
+			return;
+		}
+		viewport.scrollLeft = panStart.scrollLeft - (e.clientX - panStart.x);
+		viewport.scrollTop = panStart.scrollTop - (e.clientY - panStart.y);
+		e.preventDefault();
+	}
+
+	function endPan() {
+		if (!panning) {
+			return;
+		}
+		panning = false;
+		panStart = null;
+		viewport.classList.remove('panning');
+	}
+
 	function setStatus(text) {
 		statusEl.textContent = text;
 	}
@@ -82,7 +184,49 @@
 		document.querySelectorAll('.tool').forEach((btn) => {
 			btn.classList.toggle('active', btn.getAttribute('data-tool') === next);
 		});
-		setStatus(`${next === 'pen' ? 'Pen' : 'Line'} · ${brushSize}px`);
+		canvas.classList.toggle('tool-picker', next === 'picker');
+		if (next === 'bucket') {
+			setStatus('Bucket');
+		} else if (next === 'picker') {
+			setStatus('Picker — click to sample');
+		} else {
+			setStatus(`${next === 'pen' ? 'Brush' : 'Line'} · ${brushSize}px`);
+		}
+	}
+
+	function toolLabel() {
+		if (tool === 'pen') {
+			return 'Brush';
+		}
+		if (tool === 'line') {
+			return 'Line';
+		}
+		if (tool === 'bucket') {
+			return 'Bucket';
+		}
+		return 'Picker';
+	}
+
+	function toHex(r, g, b) {
+		return (
+			'#' +
+			[r, g, b]
+				.map((c) => c.toString(16).padStart(2, '0'))
+				.join('')
+		);
+	}
+
+	function pickColor(x, y) {
+		if (!buffer) {
+			return;
+		}
+		const i = (y * width + x) * 4;
+		const r = buffer.data[i];
+		const g = buffer.data[i + 1];
+		const b = buffer.data[i + 2];
+		color = { r, g, b, a: 255 };
+		colorInput.value = toHex(r, g, b);
+		setStatus(`Picked ${toHex(r, g, b)}`);
 	}
 
 	function parseColor(hex) {
@@ -97,6 +241,10 @@
 		canvas.height = h;
 		const data = rgba instanceof Uint8ClampedArray ? rgba : new Uint8ClampedArray(rgba);
 		buffer = new ImageData(new Uint8ClampedArray(data), w, h);
+		const fit = getFitZoom();
+		zoom = fit < 1 ? fit : 1;
+		applyZoom();
+		centerView();
 		render();
 		dirty = false;
 		resetHistory();
@@ -122,6 +270,15 @@
 
 	function clamp(v, min, max) {
 		return Math.max(min, Math.min(max, v));
+	}
+
+	function setBrushSize(next) {
+		brushSize = clamp(Math.round(next) || 1, 1, 32);
+		sizeInput.value = String(brushSize);
+		sizeNumInput.value = String(brushSize);
+		if (tool !== 'bucket' && tool !== 'picker') {
+			setStatus(`${toolLabel()} · ${brushSize}px`);
+		}
 	}
 
 	function setPixel(x, y, r, g, b, a) {
@@ -176,6 +333,77 @@
 		}
 	}
 
+	function matchesColor(/** @type {number} */ i, r, g, b, a) {
+		if (!buffer) {
+			return false;
+		}
+		const data = buffer.data;
+		return data[i] === r && data[i + 1] === g && data[i + 2] === b && data[i + 3] === a;
+	}
+
+	function floodFill(startX, startY) {
+		if (!buffer) {
+			return false;
+		}
+		const data = buffer.data;
+		const startI = (startY * width + startX) * 4;
+		const tr = data[startI];
+		const tg = data[startI + 1];
+		const tb = data[startI + 2];
+		const ta = data[startI + 3];
+
+		if (tr === color.r && tg === color.g && tb === color.b && ta === 255) {
+			return false;
+		}
+
+		/** @type {[number, number][]} */
+		const stack = [[startX, startY]];
+		let changed = false;
+
+		while (stack.length > 0) {
+			const [x, y] = stack.pop();
+			let left = x;
+			while (left >= 0 && matchesColor((y * width + left) * 4, tr, tg, tb, ta)) {
+				left--;
+			}
+			left++;
+
+			let right = x;
+			while (right < width && matchesColor((y * width + right) * 4, tr, tg, tb, ta)) {
+				right++;
+			}
+			right--;
+
+			for (let px = left; px <= right; px++) {
+				const i = (y * width + px) * 4;
+				data[i] = color.r;
+				data[i + 1] = color.g;
+				data[i + 2] = color.b;
+				data[i + 3] = 255;
+				changed = true;
+			}
+
+			for (const ny of [y - 1, y + 1]) {
+				if (ny < 0 || ny >= height) {
+					continue;
+				}
+				let inSpan = false;
+				for (let px = left; px <= right; px++) {
+					if (matchesColor((ny * width + px) * 4, tr, tg, tb, ta)) {
+						if (!inSpan) {
+							stack.push([px, ny]);
+							inSpan = true;
+						}
+					} else {
+						inSpan = false;
+					}
+				}
+			}
+		}
+
+		return changed;
+	}
+
 	function commitEdit() {
 		if (!buffer || !dirty) {
 			return;
@@ -186,12 +414,30 @@
 	}
 
 	function onPointerDown(e) {
-		if (e.button !== 0 || !buffer) {
+		if (!buffer || isPanButton(e) || spaceHeld) {
+			return;
+		}
+		if (e.button !== 0) {
 			return;
 		}
 		const p = getPos(e);
 		const x = clamp(p.x, 0, width - 1);
 		const y = clamp(p.y, 0, height - 1);
+
+		if (tool === 'bucket') {
+			if (floodFill(x, y)) {
+				render();
+				dirty = true;
+				commitEdit();
+			}
+			return;
+		}
+
+		if (tool === 'picker') {
+			pickColor(x, y);
+			return;
+		}
+
 		drawing = true;
 		lastPoint = { x, y };
 
@@ -199,14 +445,14 @@
 			stampBrush(x, y);
 			render();
 			dirty = true;
-		} else {
+		} else if (tool === 'line') {
 			lineStart = { x, y };
 			lineSnapshot = new Uint8ClampedArray(buffer.data);
 		}
 	}
 
 	function onPointerMove(e) {
-		if (!drawing || !buffer) {
+		if (panning || !drawing || !buffer) {
 			return;
 		}
 		const p = getPos(e);
@@ -220,7 +466,7 @@
 			lastPoint = { x, y };
 			render();
 			dirty = true;
-		} else if (lineStart && lineSnapshot) {
+		} else if (tool === 'line' && lineStart && lineSnapshot) {
 			buffer.data.set(lineSnapshot);
 			drawLine(lineStart.x, lineStart.y, x, y);
 			render();
@@ -228,7 +474,7 @@
 	}
 
 	function onPointerUp(e) {
-		if (!drawing || !buffer) {
+		if (panning || !drawing || !buffer) {
 			return;
 		}
 		const p = getPos(e);
@@ -252,17 +498,78 @@
 	canvas.addEventListener('mousedown', onPointerDown);
 	canvas.addEventListener('mousemove', onPointerMove);
 	window.addEventListener('mouseup', onPointerUp);
+	canvas.addEventListener('auxclick', (e) => {
+		if (e.button === 1) {
+			e.preventDefault();
+		}
+	});
+
+	viewport.addEventListener('mousedown', (e) => {
+		if (isPanButton(e)) {
+			startPan(e);
+		}
+	});
+	window.addEventListener('mousemove', onPanMove);
+	window.addEventListener('mouseup', endPan);
+
+	window.addEventListener('keydown', (e) => {
+		if (e.code !== 'Space' || e.repeat) {
+			return;
+		}
+		const tag = /** @type {HTMLElement} */ (e.target).tagName;
+		if (tag === 'INPUT' || tag === 'BUTTON') {
+			return;
+		}
+		spaceHeld = true;
+		viewport.classList.add('pan-ready');
+		e.preventDefault();
+	});
+
+	window.addEventListener('keyup', (e) => {
+		if (e.code !== 'Space') {
+			return;
+		}
+		spaceHeld = false;
+		viewport.classList.remove('pan-ready');
+		endPan();
+	});
+
+	viewport.addEventListener(
+		'wheel',
+		(e) => {
+			if (!e.ctrlKey && !e.metaKey) {
+				return;
+			}
+			e.preventDefault();
+			const factor = e.deltaY > 0 ? 1 / 1.1 : 1.1;
+			zoomAt(e.clientX, e.clientY, factor);
+		},
+		{ passive: false },
+	);
+
+	window.addEventListener('blur', () => {
+		spaceHeld = false;
+		viewport.classList.remove('pan-ready');
+		endPan();
+	});
 
 	document.querySelectorAll('.tool').forEach((btn) => {
 		btn.addEventListener('click', () => {
-			const t = /** @type {'pen' | 'line'} */ (btn.getAttribute('data-tool'));
+			const t = /** @type {'pen' | 'line' | 'bucket' | 'picker'} */ (btn.getAttribute('data-tool'));
 			setTool(t);
 		});
 	});
 
 	sizeInput.addEventListener('input', () => {
-		brushSize = parseInt(sizeInput.value, 10) || 1;
-		setStatus(`${tool === 'pen' ? 'Pen' : 'Line'} · ${brushSize}px`);
+		setBrushSize(parseInt(sizeInput.value, 10));
+	});
+
+	sizeNumInput.addEventListener('input', () => {
+		setBrushSize(parseInt(sizeNumInput.value, 10));
+	});
+
+	sizeNumInput.addEventListener('change', () => {
+		setBrushSize(parseInt(sizeNumInput.value, 10));
 	});
 
 	colorInput.addEventListener('input', () => {

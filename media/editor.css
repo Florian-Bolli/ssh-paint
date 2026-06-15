@@ -25,13 +25,41 @@ body {
 	flex-shrink: 0;
 }
 
+#tools {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
 .tool {
-	padding: 4px 10px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 30px;
+	height: 30px;
+	padding: 0;
 	border: 1px solid var(--vscode-button-border, transparent);
 	background: var(--vscode-button-secondaryBackground);
 	color: var(--vscode-button-secondaryForeground);
 	cursor: pointer;
-	border-radius: 3px;
+	border-radius: 4px;
+}
+
+.tool-img {
+	width: 20px;
+	height: 20px;
+	display: block;
+	pointer-events: none;
+	opacity: 0.88;
+	filter: brightness(0) invert(1);
+}
+
+body[data-vscode-theme-kind='vscode-light'] .tool-img {
+	filter: none;
+}
+
+.tool.active .tool-img {
+	opacity: 1;
 }
 
 .tool:hover {
@@ -49,6 +77,36 @@ body {
 	gap: 6px;
 }
 
+.size-field {
+	gap: 8px;
+}
+
+.field-label,
+.size-unit {
+	opacity: 0.85;
+	font-size: 0.9em;
+}
+
+.size-num {
+	width: 3.2em;
+	padding: 2px 4px;
+	border: 1px solid var(--vscode-input-border, #444);
+	background: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	border-radius: 3px;
+	font: inherit;
+	text-align: center;
+}
+
+.size-num:focus {
+	outline: 1px solid var(--vscode-focusBorder, #007fd4);
+	outline-offset: -1px;
+}
+
+#size {
+	width: 96px;
+}
+
 #status {
 	margin-left: auto;
 	opacity: 0.8;
@@ -59,18 +117,46 @@ body {
 	width: 100%;
 	height: calc(100% - 40px);
 	overflow: auto;
+	cursor: default;
+	background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+}
+
+#canvas-wrap {
+	display: inline-block;
+	padding: 32px;
+	line-height: 0;
+}
+
+#canvas-stage {
+	display: inline-block;
+	line-height: 0;
+	border: 1px solid var(--vscode-focusBorder, #007fd4);
+	outline: 1px solid var(--vscode-panel-border, #555);
+	outline-offset: 0;
 	background:
-		linear-gradient(45deg, #80808040 25%, transparent 25%),
-		linear-gradient(-45deg, #80808040 25%, transparent 25%),
-		linear-gradient(45deg, transparent 75%, #80808040 75%),
-		linear-gradient(-45deg, transparent 75%, #80808040 75%);
+		linear-gradient(45deg, #80808055 25%, transparent 25%),
+		linear-gradient(-45deg, #80808055 25%, transparent 25%),
+		linear-gradient(45deg, transparent 75%, #80808055 75%),
+		linear-gradient(-45deg, transparent 75%, #80808055 75%);
 	background-size: 16px 16px;
 	background-position: 0 0, 0 8px, 8px -8px, -8px 0;
-	background-color: var(--vscode-editor-background);
+	background-color: #80808022;
 }
 
 #canvas {
 	display: block;
 	image-rendering: pixelated;
 	cursor: crosshair;
+}
+
+#viewport.pan-ready #canvas {
+	cursor: grab;
+}
+
+#viewport.panning #canvas {
+	cursor: grabbing;
+}
+
+#canvas.tool-picker {
+	cursor: cell;
 }
