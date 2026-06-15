@@ -98,6 +98,19 @@
 		return Math.min(availableW / width, availableH / height);
 	}
 
+	function getWidthFitZoom() {
+		if (!width || !height) {
+			return 1;
+		}
+		const pad = FIT_PADDING * 2;
+		const availableW = Math.max(1, viewport.clientWidth - pad);
+		return availableW / width;
+	}
+
+	function getDefaultOpenZoom() {
+		return clamp(getWidthFitZoom(), getMinZoom(), MAX_ZOOM);
+	}
+
 	function getMinZoom() {
 		const fit = getFitZoom();
 		return fit < 1 ? fit : 1;
@@ -115,6 +128,27 @@
 		const content = getContentSize();
 		viewport.scrollLeft = Math.max(0, (content.width - viewport.clientWidth) / 2);
 		viewport.scrollTop = Math.max(0, (content.height - viewport.clientHeight) / 2);
+	}
+
+	function scrollToDefaultView() {
+		const content = getContentSize();
+		viewport.scrollLeft = Math.max(0, (content.width - viewport.clientWidth) / 2);
+		if (content.height <= viewport.clientHeight) {
+			viewport.scrollTop = Math.max(0, (content.height - viewport.clientHeight) / 2);
+		} else {
+			viewport.scrollTop = 0;
+		}
+	}
+
+	function applyDefaultView() {
+		if (viewport.clientWidth <= 0) {
+			zoom = 1;
+			applyZoom();
+			return;
+		}
+		zoom = getDefaultOpenZoom();
+		applyZoom();
+		scrollToDefaultView();
 	}
 
 	function zoomAt(clientX, clientY, factor) {
@@ -241,13 +275,11 @@
 		canvas.height = h;
 		const data = rgba instanceof Uint8ClampedArray ? rgba : new Uint8ClampedArray(rgba);
 		buffer = new ImageData(new Uint8ClampedArray(data), w, h);
-		const fit = getFitZoom();
-		zoom = fit < 1 ? fit : 1;
-		applyZoom();
-		centerView();
 		render();
 		dirty = false;
 		resetHistory();
+		applyDefaultView();
+		requestAnimationFrame(applyDefaultView);
 		setStatus('Ready');
 	}
 
