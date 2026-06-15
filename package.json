@@ -1,0 +1,103 @@
+{
+	"name": "ssh-paint",
+	"displayName": "SSH Paint",
+	"publisher": "Florian-Bolli",
+	"description": "Lightweight PNG editor for VS Code — pen and line tools, undo/redo, built for Remote SSH.",
+	"version": "0.1.0",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Florian-Bolli/ssh-paint.git"
+	},
+	"bugs": {
+		"url": "https://github.com/Florian-Bolli/ssh-paint/issues"
+	},
+	"homepage": "https://github.com/Florian-Bolli/ssh-paint#readme",
+	"engines": {
+		"vscode": "^1.85.0"
+	},
+	"extensionKind": [
+		"workspace"
+	],
+	"categories": [
+		"Other"
+	],
+	"keywords": [
+		"paint",
+		"png",
+		"image",
+		"editor",
+		"remote",
+		"ssh",
+		"drawing"
+	],
+	"activationEvents": [],
+	"main": "./out/extension.js",
+	"capabilities": {
+		"untrustedWorkspaces": {
+			"supported": true
+		}
+	},
+	"contributes": {
+		"customEditors": [
+			{
+				"viewType": "sshPaint.editor",
+				"displayName": "SSH Paint",
+				"priority": "default",
+				"selector": [
+					{
+						"filenamePattern": "*.png"
+					}
+				]
+			}
+		],
+		"commands": [
+			{
+				"command": "sshPaint.tool.pen",
+				"title": "SSH Paint: Pen Tool",
+				"icon": "$(edit)"
+			},
+			{
+				"command": "sshPaint.tool.line",
+				"title": "SSH Paint: Line Tool",
+				"icon": "$(git-commit)"
+			},
+			{
+				"command": "sshPaint.file.new",
+				"title": "SSH Paint: New Image",
+				"icon": "$(file-add)"
+			}
+		],
+		"keybindings": [
+			{
+				"command": "sshPaint.tool.pen",
+				"key": "p",
+				"when": "activeCustomEditorId == 'sshPaint.editor' && !inQuickOpen"
+			},
+			{
+				"command": "sshPaint.tool.pen",
+				"key": "b",
+				"when": "activeCustomEditorId == 'sshPaint.editor' && !inQuickOpen"
+			},
+			{
+				"command": "sshPaint.tool.line",
+				"key": "l",
+				"when": "activeCustomEditorId == 'sshPaint.editor' && !inQuickOpen"
+			}
+		]
+	},
+	"scripts": {
+		"compile": "node esbuild.mjs",
+		"watch": "node esbuild.mjs --watch",
+		"package": "vsce package"
+	},
+	"devDependencies": {
+		"@types/node": "^20.11.0",
+		"@types/vscode": "^1.85.0",
+		"esbuild": "^0.20.0",
+		"typescript": "^5.3.0"
+	},
+	"dependencies": {
+		"@lunapaint/png-codec": "^0.2.0"
+	}
+}
