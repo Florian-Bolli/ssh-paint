@@ -62,6 +62,14 @@ body[data-vscode-theme-kind='vscode-light'] .tool-img {
 	opacity: 1;
 }
 
+.reload-btn {
+	width: auto;
+	min-width: 30px;
+	padding: 0 8px;
+	font-size: 18px;
+	line-height: 1;
+}
+
 .tool:hover {
 	background: var(--vscode-button-secondaryHoverBackground);
 }

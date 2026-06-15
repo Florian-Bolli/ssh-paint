@@ -6,21 +6,28 @@ type PixelBuffer = number[] | Uint8ClampedArray;
 type WebviewInboundMessage =
 	| { type: 'ready' }
 	| { type: 'edit'; rgba: PixelBuffer }
-	| { type: 'imageData'; rgba: PixelBuffer };
+	| { type: 'imageData'; rgba: PixelBuffer }
+	| { type: 'status'; dirty: boolean; drawing: boolean }
+	| { type: 'reloadRequest' };
 
 type WebviewOutboundMessage =
 	| { type: 'init'; width: number; height: number; rgba: PixelBuffer }
+	| { type: 'reload'; width: number; height: number; rgba: PixelBuffer }
 	| { type: 'setTool'; tool: 'pen' | 'line' | 'bucket' | 'picker' }
+	| { type: 'queryStatus' }
 	| { type: 'undo' }
 	| { type: 'redo' }
 	| { type: 'save' }
-	| { type: 'saved' };
+	| { type: 'saved' }
+	| { type: 'reloadBlocked' };
 
 function toClampedArray(rgba: PixelBuffer): Uint8ClampedArray {
 	return rgba instanceof Uint8ClampedArray ? rgba : new Uint8ClampedArray(rgba);
 }
 
 export class PaintEditorProvider implements vscode.CustomEditorProvider<PaintDocument> {
+	private static readonly RELOAD_INTERVAL_MS = 10_000;
+
 	private readonly _onDidChangeCustomDocument = new vscode.EventEmitter<
 		vscode.CustomDocumentEditEvent<PaintDocument>
 	>();
@@ -99,9 +106,16 @@ export class PaintEditorProvider implements vscode.CustomEditorProvider<PaintDoc
 					case 'edit':
 						document.updateImage(toClampedArray(message.rgba), historySync);
 						break;
+					case 'reloadRequest':
+						void this._reloadFromDisk(document, webviewPanel, { force: true });
+						break;
 				}
 			},
 		);
+
+		const reloadTimer = setInterval(() => {
+			void this._reloadFromDisk(document, webviewPanel, { force: false });
+		}, PaintEditorProvider.RELOAD_INTERVAL_MS);
 
 		webviewPanel.onDidChangeViewState((e) => {
 			if (e.webviewPanel.active) {
@@ -114,6 +128,7 @@ export class PaintEditorProvider implements vscode.CustomEditorProvider<PaintDoc
 		}
 
 		webviewPanel.onDidDispose(() => {
+			clearInterval(reloadTimer);
 			this._editors.delete(key);
 			if (this._activeUri?.toString() === key) {
 				this._activeUri = undefined;
@@ -153,6 +168,63 @@ export class PaintEditorProvider implements vscode.CustomEditorProvider<PaintDoc
 			return;
 		}
 		await vscode.workspace.fs.writeFile(destination, encoded.data);
+	}
+
+	private _queryWebviewStatus(
+		panel: vscode.WebviewPanel,
+	): Promise<{ dirty: boolean; drawing: boolean }> {
+		return new Promise((resolve) => {
+			const timeout = setTimeout(() => resolve({ dirty: false, drawing: false }), 1000);
+			const sub = panel.webview.onDidReceiveMessage((message: WebviewInboundMessage) => {
+				if (message.type === 'status') {
+					clearTimeout(timeout);
+					sub.dispose();
+					resolve({ dirty: message.dirty, drawing: message.drawing });
+				}
+			});
+			panel.webview.postMessage({ type: 'queryStatus' } satisfies WebviewOutboundMessage);
+		});
+	}
+
+	private async _reloadFromDisk(
+		document: PaintDocument,
+		panel: vscode.WebviewPanel,
+		options: { force: boolean },
+	): Promise<void> {
+		if (document.hasUnsavedChanges()) {
+			if (!options.force) {
+				return;
+			}
+			const answer = await vscode.window.showWarningMessage(
+				'Discard unsaved changes and reload from disk?',
+				{ modal: true },
+				'Reload',
+			);
+			if (answer !== 'Reload') {
+				panel.webview.postMessage({ type: 'reloadBlocked' } satisfies WebviewOutboundMessage);
+				return;
+			}
+		}
+
+		const status = await this._queryWebviewStatus(panel);
+		if (!options.force && (status.dirty || status.drawing)) {
+			return;
+		}
+
+		const image = await document.reloadFromDisk();
+		if (!image) {
+			if (options.force) {
+				panel.webview.postMessage({ type: 'reloadBlocked' } satisfies WebviewOutboundMessage);
+			}
+			return;
+		}
+
+		panel.webview.postMessage({
+			type: 'reload',
+			width: image.width,
+			height: image.height,
+			rgba: image.rgba,
+		} satisfies WebviewOutboundMessage);
 	}
 
 	private _requestImageData(document: PaintDocument): Promise<Uint8ClampedArray | undefined> {
@@ -270,6 +342,7 @@ export class PaintEditorProvider implements vscode.CustomEditorProvider<PaintDoc
 			<span class="size-unit">px</span>
 		</label>
 		<label class="field">Color <input type="color" id="color" value="#000000"></label>
+		<button type="button" id="reload-btn" class="tool reload-btn" title="Reload from disk">↻</button>
 		<span id="status"></span>
 	</div>
 	<div id="viewport">

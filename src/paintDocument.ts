@@ -105,6 +105,32 @@ export class PaintDocument implements vscode.CustomDocument {
 		return false;
 	}
 
+	hasUnsavedChanges(): boolean {
+		return this.isDirty(this._rgba);
+	}
+
+	async reloadFromDisk(): Promise<PaintImageData | null> {
+		try {
+			const bytes = new Uint8Array(await vscode.workspace.fs.readFile(this.uri));
+			const decoded = await decodePng(bytes);
+			const rgba = new Uint8ClampedArray(decoded.image.data);
+			const sameSize =
+				decoded.image.width === this.width &&
+				decoded.image.height === this.height &&
+				rgba.length === this._rgba.length;
+			if (sameSize && arraysEqual(rgba, this._rgba)) {
+				return null;
+			}
+			this.width = decoded.image.width;
+			this.height = decoded.image.height;
+			this._rgba = rgba;
+			this._savedRgba = new Uint8ClampedArray(rgba);
+			return this.getImage();
+		} catch {
+			return null;
+		}
+	}
+
 	markSaved(rgba: Uint8ClampedArray): void {
 		this._savedRgba = new Uint8ClampedArray(rgba);
 	}

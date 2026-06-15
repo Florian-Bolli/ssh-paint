@@ -283,6 +283,26 @@
 		setStatus('Ready');
 	}
 
+	function applyReload(rgba) {
+		if (!buffer) {
+			return;
+		}
+		const data = rgba instanceof Uint8ClampedArray ? rgba : new Uint8ClampedArray(rgba);
+		buffer.data.set(data);
+		render();
+		dirty = false;
+		resetHistory();
+		setStatus('Reloaded from disk');
+	}
+
+	function reloadImage(w, h, rgba) {
+		if (w === width && h === height && buffer) {
+			applyReload(rgba);
+			return;
+		}
+		initImage(w, h, rgba);
+	}
+
 	function render() {
 		if (!buffer) {
 			return;
@@ -608,11 +628,22 @@
 		color = parseColor(colorInput.value);
 	});
 
+	const reloadBtn = /** @type {HTMLButtonElement} */ (document.getElementById('reload-btn'));
+	reloadBtn.addEventListener('click', () => {
+		vscode.postMessage({ type: 'reloadRequest' });
+	});
+
 	window.addEventListener('message', (event) => {
 		const message = event.data;
 		switch (message.type) {
 			case 'init':
 				initImage(message.width, message.height, message.rgba);
+				break;
+			case 'reload':
+				reloadImage(message.width, message.height, message.rgba);
+				break;
+			case 'queryStatus':
+				vscode.postMessage({ type: 'status', dirty, drawing });
 				break;
 			case 'setTool':
 				setTool(message.tool);
@@ -630,6 +661,9 @@
 				break;
 			case 'saved':
 				setStatus('Saved');
+				break;
+			case 'reloadBlocked':
+				setStatus('Reload cancelled');
 				break;
 		}
 	});
