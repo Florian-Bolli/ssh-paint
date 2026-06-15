@@ -16,6 +16,9 @@ export function activate(context: vscode.ExtensionContext): void {
 		vscode.commands.registerCommand('sshPaint.tool.bucket', () => {
 			provider?.setTool('bucket');
 		}),
+		vscode.commands.registerCommand('sshPaint.tool.picker', () => {
+			provider?.setTool('picker');
+		}),
 		vscode.commands.registerCommand('sshPaint.file.new', () => createNewImage()),
 	);
 }

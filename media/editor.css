@@ -60,20 +60,29 @@ body {
 	height: calc(100% - 40px);
 	overflow: auto;
 	cursor: default;
-	background:
-		linear-gradient(45deg, #80808040 25%, transparent 25%),
-		linear-gradient(-45deg, #80808040 25%, transparent 25%),
-		linear-gradient(45deg, transparent 75%, #80808040 75%),
-		linear-gradient(-45deg, transparent 75%, #80808040 75%);
-	background-size: 16px 16px;
-	background-position: 0 0, 0 8px, 8px -8px, -8px 0;
-	background-color: var(--vscode-editor-background);
+	background: var(--vscode-sideBar-background, var(--vscode-editor-background));
 }
 
 #canvas-wrap {
 	display: inline-block;
 	padding: 32px;
 	line-height: 0;
+}
+
+#canvas-stage {
+	display: inline-block;
+	line-height: 0;
+	border: 1px solid var(--vscode-focusBorder, #007fd4);
+	outline: 1px solid var(--vscode-panel-border, #555);
+	outline-offset: 0;
+	background:
+		linear-gradient(45deg, #80808055 25%, transparent 25%),
+		linear-gradient(-45deg, #80808055 25%, transparent 25%),
+		linear-gradient(45deg, transparent 75%, #80808055 75%),
+		linear-gradient(-45deg, transparent 75%, #80808055 75%);
+	background-size: 16px 16px;
+	background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+	background-color: #80808022;
 }
 
 #canvas {
@@ -88,4 +97,8 @@ body {
 
 #viewport.panning #canvas {
 	cursor: grabbing;
+}
+
+#canvas.tool-picker {
+	cursor: cell;
 }

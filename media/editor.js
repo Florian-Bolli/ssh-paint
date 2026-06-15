@@ -13,7 +13,7 @@
 		throw new Error('Canvas 2D not available');
 	}
 
-	/** @type {'pen' | 'line' | 'bucket'} */
+	/** @type {'pen' | 'line' | 'bucket' | 'picker'} */
 	let tool = 'pen';
 	let brushSize = 1;
 	let color = { r: 0, g: 0, b: 0, a: 255 };
@@ -183,8 +183,11 @@
 		document.querySelectorAll('.tool').forEach((btn) => {
 			btn.classList.toggle('active', btn.getAttribute('data-tool') === next);
 		});
+		canvas.classList.toggle('tool-picker', next === 'picker');
 		if (next === 'bucket') {
 			setStatus('Bucket');
+		} else if (next === 'picker') {
+			setStatus('Picker — click to sample');
 		} else {
 			setStatus(`${next === 'pen' ? 'Pen' : 'Line'} · ${brushSize}px`);
 		}
@@ -197,7 +200,32 @@
 		if (tool === 'line') {
 			return 'Line';
 		}
-		return 'Bucket';
+		if (tool === 'bucket') {
+			return 'Bucket';
+		}
+		return 'Picker';
+	}
+
+	function toHex(r, g, b) {
+		return (
+			'#' +
+			[r, g, b]
+				.map((c) => c.toString(16).padStart(2, '0'))
+				.join('')
+		);
+	}
+
+	function pickColor(x, y) {
+		if (!buffer) {
+			return;
+		}
+		const i = (y * width + x) * 4;
+		const r = buffer.data[i];
+		const g = buffer.data[i + 1];
+		const b = buffer.data[i + 2];
+		color = { r, g, b, a: 255 };
+		colorInput.value = toHex(r, g, b);
+		setStatus(`Picked ${toHex(r, g, b)}`);
 	}
 
 	function parseColor(hex) {
@@ -395,6 +423,11 @@
 			return;
 		}
 
+		if (tool === 'picker') {
+			pickColor(x, y);
+			return;
+		}
+
 		drawing = true;
 		lastPoint = { x, y };
 
@@ -512,14 +545,14 @@
 
 	document.querySelectorAll('.tool').forEach((btn) => {
 		btn.addEventListener('click', () => {
-			const t = /** @type {'pen' | 'line' | 'bucket'} */ (btn.getAttribute('data-tool'));
+			const t = /** @type {'pen' | 'line' | 'bucket' | 'picker'} */ (btn.getAttribute('data-tool'));
 			setTool(t);
 		});
 	});
 
 	sizeInput.addEventListener('input', () => {
 		brushSize = parseInt(sizeInput.value, 10) || 1;
-		if (tool !== 'bucket') {
+		if (tool !== 'bucket' && tool !== 'picker') {
 			setStatus(`${toolLabel()} · ${brushSize}px`);
 		}
 	});
