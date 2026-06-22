@@ -1,14 +1,15 @@
-import { decodePng, encodePng } from '@lunapaint/png-codec';
+import { decodePng } from '@lunapaint/png-codec';
 import * as vscode from 'vscode';
+import {
+	encodePngWithProfile,
+	profileFromDecoded,
+	type PngEncodeProfile,
+} from './pngEncode';
 
 export interface PaintImageData {
 	width: number;
 	height: number;
 	rgba: Uint8ClampedArray;
-}
-
-function toImage32(rgba: Uint8ClampedArray, width: number, height: number) {
-	return { data: new Uint8Array(rgba), width, height };
 }
 
 function arraysEqual(a: Uint8ClampedArray, b: Uint8ClampedArray): boolean {
@@ -27,9 +28,10 @@ export class PaintDocument implements vscode.CustomDocument {
 	static async create(uri: vscode.Uri, backupId?: string): Promise<PaintDocument> {
 		const fileUri = backupId ? vscode.Uri.parse(backupId) : uri;
 		const bytes = new Uint8Array(await vscode.workspace.fs.readFile(fileUri));
-		const decoded = await decodePng(bytes);
+		const decoded = await decodePng(bytes, { force32: true });
 		const rgba = new Uint8ClampedArray(decoded.image.data);
-		return new PaintDocument(uri, decoded.image.width, decoded.image.height, rgba);
+		const profile = profileFromDecoded(decoded.details);
+		return new PaintDocument(uri, decoded.image.width, decoded.image.height, rgba, profile);
 	}
 
 	private readonly _onDidDispose = new vscode.EventEmitter<void>();
@@ -41,14 +43,25 @@ export class PaintDocument implements vscode.CustomDocument {
 	readonly onDidChange = this._onDidChange.event;
 
 	private _savedRgba: Uint8ClampedArray;
+	private _encodeProfile: PngEncodeProfile;
 
 	private constructor(
 		public readonly uri: vscode.Uri,
 		public width: number,
 		public height: number,
 		private _rgba: Uint8ClampedArray,
+		encodeProfile: PngEncodeProfile,
 	) {
 		this._savedRgba = new Uint8ClampedArray(_rgba);
+		this._encodeProfile = encodeProfile;
+	}
+
+	getEncodeProfile(): PngEncodeProfile {
+		return this._encodeProfile;
+	}
+
+	async encodeImage(rgba: Uint8ClampedArray = this._rgba): Promise<Uint8Array> {
+		return encodePngWithProfile(rgba, this.width, this.height, this._encodeProfile);
 	}
 
 	getImage(): PaintImageData {
@@ -112,7 +125,7 @@ export class PaintDocument implements vscode.CustomDocument {
 	async reloadFromDisk(): Promise<PaintImageData | null> {
 		try {
 			const bytes = new Uint8Array(await vscode.workspace.fs.readFile(this.uri));
-			const decoded = await decodePng(bytes);
+			const decoded = await decodePng(bytes, { force32: true });
 			const rgba = new Uint8ClampedArray(decoded.image.data);
 			const sameSize =
 				decoded.image.width === this.width &&
@@ -125,6 +138,7 @@ export class PaintDocument implements vscode.CustomDocument {
 			this.height = decoded.image.height;
 			this._rgba = rgba;
 			this._savedRgba = new Uint8ClampedArray(rgba);
+			this._encodeProfile = profileFromDecoded(decoded.details);
 			return this.getImage();
 		} catch {
 			return null;
@@ -143,8 +157,8 @@ export class PaintDocument implements vscode.CustomDocument {
 		if (cancellation.isCancellationRequested) {
 			return;
 		}
-		const encoded = await encodePng(toImage32(this._rgba, this.width, this.height));
-		await vscode.workspace.fs.writeFile(this.uri, encoded.data);
+		const pngBytes = await this.encodeImage();
+		await vscode.workspace.fs.writeFile(this.uri, pngBytes);
 		this.markSaved(this._rgba);
 	}
 

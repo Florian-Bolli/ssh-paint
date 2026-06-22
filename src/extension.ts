@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { PaintEditorProvider } from './paintEditorProvider';
+import { DEFAULT_PNG_ENCODE_PROFILE, encodePngWithProfile } from './pngEncode';
 
 let provider: PaintEditorProvider | undefined;
 
@@ -40,8 +41,7 @@ async function createNewImage(): Promise<void> {
 	const height = 64;
 	const rgba = new Uint8ClampedArray(width * height * 4);
 
-	const { encodePng } = await import('@lunapaint/png-codec');
-	const encoded = await encodePng({ data: new Uint8Array(rgba), width, height });
-	await vscode.workspace.fs.writeFile(uri, encoded.data);
+	const pngBytes = await encodePngWithProfile(rgba, width, height, DEFAULT_PNG_ENCODE_PROFILE);
+	await vscode.workspace.fs.writeFile(uri, pngBytes);
 	await vscode.commands.executeCommand('vscode.openWith', uri, 'sshPaint.editor');
 }

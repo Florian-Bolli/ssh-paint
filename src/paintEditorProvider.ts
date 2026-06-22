@@ -158,16 +158,14 @@ export class PaintEditorProvider implements vscode.CustomEditorProvider<PaintDoc
 	): Promise<void> {
 		const rgba = await this._requestImageData(document);
 		const image = rgba ?? document.getImage().rgba;
-		const { encodePng } = await import('@lunapaint/png-codec');
-		const encoded = await encodePng({
-			data: new Uint8Array(image),
-			width: document.width,
-			height: document.height,
-		});
+		if (rgba) {
+			document.setImageSilent(rgba);
+		}
+		const pngBytes = await document.encodeImage(image);
 		if (cancellation.isCancellationRequested) {
 			return;
 		}
-		await vscode.workspace.fs.writeFile(destination, encoded.data);
+		await vscode.workspace.fs.writeFile(destination, pngBytes);
 	}
 
 	private _queryWebviewStatus(
@@ -267,14 +265,12 @@ export class PaintEditorProvider implements vscode.CustomEditorProvider<PaintDoc
 		context: vscode.CustomDocumentBackupContext,
 		_cancellation: vscode.CancellationToken,
 	): Promise<vscode.CustomDocumentBackup> {
-		const { encodePng } = await import('@lunapaint/png-codec');
-		const image = document.getImage();
-		const encoded = await encodePng({
-			data: new Uint8Array(image.rgba),
-			width: image.width,
-			height: image.height,
-		});
-		await vscode.workspace.fs.writeFile(context.destination, encoded.data);
+		const rgba = await this._requestImageData(document);
+		if (rgba) {
+			document.setImageSilent(rgba);
+		}
+		const pngBytes = await document.encodeImage();
+		await vscode.workspace.fs.writeFile(context.destination, pngBytes);
 		return {
 			id: context.destination.toString(),
 			delete: async () => {
